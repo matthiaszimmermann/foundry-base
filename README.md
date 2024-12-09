@@ -1,66 +1,67 @@
-## Foundry
+# Foundry Base Repository
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+This repository provides a complete development environment for building and testing Solidity smart contracts using Foundry within a VSCode DevContainer setup.
 
-Foundry consists of:
+## Purpose 
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+The setup includes OpenZeppelin V5 contracts and upgradeable contracts, allowing developers to easily create, deploy, and test upgradeable smart contracts. 
 
-## Documentation
+The repository features a pre-configured dev container setup to ensuring consistency across environments. 
+A sample upgradeable ERC20 contract and corresponding test cases are included to serve as a blueprint on how to use the setup.
 
-https://book.getfoundry.sh/
+## Sample Contracts 
 
-## Usage
+The repository provides two sample Solidity smart contracts in subfolder `src`.
 
-### Build
+- **Counter**: A very simple smart contract
+- **Token**: An upgradeable token contract using OpenZeppelin V5
+
+Corresponding tests are located in subfolder `test`.
+
+## Preparation
+
+To use this repository the following software is required:
+
+- Git
+- Docker
+- VSCode
+
+## Initial Setup
+
+1. Clone repository into directory of your choice
+1. Open VSCode in this directory
+1. Run Devcontainer setup
+
+
+### Git Submodules Checkout
+
+The project makes use of Git submodules for dependencies.
+After cloning the repository also checkout the submodules using the command shown below. 
+
+```shell
+git submodule update --init --recursive
+```
+
+To update the submodules, use the following command.
+
+```shell
+git submodule update --recursive
+```
+
+## Using Foundry
+
+### Forge Build
 
 ```shell
 $ forge build
+$ forge build --sizes
 ```
 
-### Test
+### Forge Test
 
 ```shell
 $ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+$ forge test --mt test_Token
+$ forge test --gas-report
+$ forge coverage
 ```
