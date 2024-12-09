@@ -50,6 +50,16 @@ git submodule update --recursive
 
 ## Using Foundry
 
+### Forge Format
+
+Formats Solidity files to common standard.
+The command `forge fmt --check` should not show any errors before pushing to Github.
+
+```shell
+$ forge fmt
+$ forge fmt --check
+```
+
 ### Forge Build
 
 ```shell
@@ -58,6 +68,9 @@ $ forge build --sizes
 ```
 
 ### Forge Test
+
+Runs tests. 
+The command `forge test` should not show any errors before pushing to Github.
 
 ```shell
 $ forge test

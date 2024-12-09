@@ -4,10 +4,7 @@ pragma solidity ^0.8.20;
 import {Token} from "../src/Token.sol";
 import {TokenTestBase} from "./TokenBase.t.sol";
 
-contract TokenTest is
-    TokenTestBase
-{
-
+contract TokenTest is TokenTestBase {
     function test_TokenInitialBalance() public {
         assertEq(token.balanceOf(deployer), 1000 * 10 ** token.decimals());
     }

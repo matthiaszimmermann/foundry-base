@@ -8,26 +8,20 @@ import {Test, Vm, console} from "forge-std/Test.sol";
 
 import {Token} from "../src/Token.sol";
 
-contract TokenTestBase is
-    Test
-{
+contract TokenTestBase is Test {
     Token token;
     address deployer = makeAddr("deployer");
     ProxyAdmin proxyAdmin = ProxyAdmin(address(0));
 
-
     function setUp() public {
         // Deploy the initial implementation
         Token implementation = new Token();
-        
+
         // Initialize the proxy (deployer is proxy admin)
         bytes memory data = abi.encodeWithSignature("initialize(string,string,address)", "MyToken", "MTK", deployer);
 
         vm.recordLogs();
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
-            address(implementation), 
-            deployer, 
-            data);
+        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(address(implementation), deployer, data);
 
         proxyAdmin = _getProxyAdmin(vm.getRecordedLogs());
         assertTrue(address(proxyAdmin) != address(0));
@@ -41,11 +35,7 @@ contract TokenTestBase is
         console.log("ProxyAdmin owner", proxyAdmin.owner());
     }
 
-    function _getProxyAdmin(Vm.Log[] memory logs)
-        internal 
-        pure 
-        returns (ProxyAdmin admin)
-    {
+    function _getProxyAdmin(Vm.Log[] memory logs) internal pure returns (ProxyAdmin admin) {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].topics[0] == IERC1967.AdminChanged.selector) {
                 (, address adminAddress) = abi.decode(logs[i].data, (address, address));
