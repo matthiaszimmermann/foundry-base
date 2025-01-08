@@ -99,7 +99,7 @@ A partial workaround is shown below (does not show struct organization).
 forge inspect ERC20StorageInspector storage
 ```
 
-## Run Bot
+## Interact with Deployed Contracts
 
 ### Start a Local Anvil Chain
 
@@ -133,7 +133,7 @@ forge script script/Token.s.sol --fork-url http://127.0.0.1:8545 --broadcast --p
 
 ```shell
 eval $(echo export $(grep MNEMONIC .env))
-cd bot
+cd app
 uv run python3
 ```
 
