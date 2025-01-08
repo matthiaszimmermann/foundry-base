@@ -14,6 +14,7 @@ A sample upgradeable ERC20 contract and corresponding test cases are included to
 The repository provides two sample Solidity smart contracts in subfolder `src`.
 
 - **Counter**: A very simple smart contract
+- **MultiSigWallet**: A simple multi sig wallet contract from Cyfrin
 - **Token**: An upgradeable token contract using OpenZeppelin V5
 
 Corresponding tests are located in subfolder `test`.
@@ -73,10 +74,29 @@ Runs tests.
 The command `forge test` should not show any errors before pushing to Github.
 
 ```shell
-$ forge test
-$ forge test --mt test_Token
-$ forge test --gas-report
-$ forge coverage
+forge test
+forge test --mt test_Token
+forge test --gas-report
+forge coverage
+```
+
+### Contract Storage Layout
+
+Check storage layout for classical (non upgradeable) contracts.
+
+```
+forge clean
+forge build
+forge inspect MultiSigWallet storage
+```
+
+The storage layout of upgradeable contracts like `Token` cannot be inspected directly. 
+In addition, OpenZeppelin V5, the namespace storage layout is not yet supported by `forge inspect`, see [foundry issue #7662](https://github.com/foundry-rs/foundry/issues/7662).
+
+A partial workaround is shown below (does not show struct organization).
+
+```
+forge inspect ERC20StorageInspector storage
 ```
 
 ## Run Bot
@@ -96,23 +116,24 @@ export ETH_MNEMONIC=$(grep ETH_MNEMONIC .env | cut -d\" -f2)
 anvil --mnemonic $ETH_MNEMONIC
 ```
 
-### Deploy Counter Contract to Local Anvil
+### Deploy Token Contract to Local Anvil
 
 1. Open a new shell
 1. Run deploy script with `forge script` using the new private key in the `.env` file
 1. Record the address of the newly deployed contract (used as `<contract-address>` below)
 
 ```shell
-forge script script/Counter.s.sol --fork-url http://127.0.0.1:8545 --broadcast --private-key $(grep ETH_PRIVATE_KEY .env | cut -d= -f2)
+forge script script/Token.s.sol --fork-url http://127.0.0.1:8545 --broadcast --private-key $(grep ETH_PRIVATE_KEY .env | cut -d= -f2)
 ```
 
-### Interact with the Counter Contract
+### Interact with the Token Contract
 
 1. set the `ETH_MNEMONIC` variable using the `.env` file
 1. Start a python shell
 
 ```shell
 eval $(echo export $(grep MNEMONIC .env))
+cd bot
 uv run python3
 ```
 
@@ -122,27 +143,33 @@ Follow the steps in the python shell below.
 import os
 
 from web3 import Web3
-from bot.web3.contract import Contract
-from bot.web3.wallet import Wallet
-
-# create account using the env variable mnemonic
-w = Wallet.from_mnemonic(os.getenv('ETH_MNEMONIC'))
+from web3utils.contract import Contract
+from web3utils.wallet import Wallet
 
 # verify that w3_uri matches with your anvil chain
 w3_uri = "http://127.0.0.1:8545"
 w3 = Web3(Web3.HTTPProvider(w3_uri))
-c_address = "<contract-address>"
-c = Contract(w3, "Counter", c_address)
 
-# contract call example
-c.number()
+# create account using the env variable mnemonic
+w = Wallet.from_mnemonic(os.getenv('ETH_MNEMONIC'), w3=w3)
+a = Wallet.create(w3=w3)
 
-# contract tx examples
-tx1 = c.increment({'from': w})
-tx2 = c.setNumber(42, {'from': w})
+# transfer 1 eth and check balance
+w.transfer(a, 10**18)
+a.balance()/10**18
+
+# create token object
+token_address = "<contract-address>"
+token = Contract(w3, "Token", token_address)
+
+# print token balance of deployer (in full tokens)
+token.balanceOf(w)/10**token.decimals()
+
+# transfer some tokens
+tx_hash = token.transfer(a, 42*10**token.decimals(), {'from':w})
 
 # extract logs example
 # for filter parameter see https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs 
-logs = c.get_logs({'fromBlock':'latest'})
-c.contract.events.NumberUpdated.process_log(logs[0])
+logs = token.get_logs({'fromBlock':'latest'})
+token.contract.events.Transfer.process_log(logs[0])
 ```

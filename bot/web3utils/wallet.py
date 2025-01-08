@@ -1,11 +1,13 @@
-from typing import Any
+from typing import Any, Union
 
 from eth_account import Account
 from eth_account.hdaccount import ETHEREUM_DEFAULT_PATH
 from eth_account.signers.local import LocalAccount
 from eth_account.types import Language
 
-from bot.util.password import generate_password
+from web3 import Web3
+
+from util.password import generate_password
 
 
 class Wallet:
@@ -26,6 +28,7 @@ class Wallet:
     language: Language | None
     path: str | None
     index: int | None
+    w3: Web3 | None
 
     def __init__(self) -> None:
         """Create a new wallet.
@@ -43,6 +46,51 @@ class Wallet:
         self.language = None
         self.path = ETHEREUM_DEFAULT_PATH
         self.index = Wallet.INDEX_DEFAULT
+        self.w3 = None
+
+
+    def nonce(self) -> int:
+        if not self.w3:
+            raise ValueError("Web3 instance not provided")
+
+        return self.w3.eth.get_transaction_count(self.address)
+
+
+    def balance(self) -> int:
+        if not self.w3:
+            raise ValueError("Web3 instance not provided")
+
+        return self.w3.eth.get_balance(self.address)
+
+
+    def transfer(self, to: Union [str, "Wallet"], amount: int, gas_price: int = None) -> str:
+        if not self.w3:
+            raise ValueError("Web3 instance not provided")
+        
+        if isinstance(to, Wallet):
+            to = to.address
+
+        nonce = self.nonce()
+        gas = 21000
+        gas_price = gas_price or self.w3.eth.gas_price
+
+        tx = {
+            "to": to,
+            "value": amount,
+            "nonce": nonce,
+            "gas": gas,
+            "gasPrice": gas_price,
+        }
+
+        try:
+            signed = self.account.sign_transaction(tx)
+            tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
+
+        except Exception as e:
+            raise ValueError(f"Error sending transaction: {e}")
+
+        return tx_hash.to_0x_hex()
+
 
     @classmethod
     def create(
@@ -51,6 +99,7 @@ class Wallet:
         language: Language = LANGUAGE_DEFAULT,
         index: int = INDEX_DEFAULT,
         password: str | None = None,
+        w3: Web3 | None = None,
         print_address: bool = True,  # noqa: FBT001, FBT002
     ) -> "Wallet":
         """Create a new wallet."""
@@ -79,6 +128,7 @@ class Wallet:
 
         wallet.password = password
         wallet.vault = wallet.account.encrypt(password)  # type: ignore  # noqa: PGH003
+        wallet.w3 = w3
 
         return wallet
 
@@ -88,6 +138,7 @@ class Wallet:
         index: int = INDEX_DEFAULT,
         password: str = generate_password(),
         path: str = ETHEREUM_DEFAULT_PATH,
+        w3: Web3 | None = None,
     ) -> "Wallet":
         """Create a new wallet from a provided mnemonic."""
         Wallet.validate_mnemonic(mnemonic)
@@ -97,6 +148,7 @@ class Wallet:
         wallet.mnemonic = mnemonic
         wallet.index = index
         wallet.path = path
+        wallet.w3 = w3
 
         # modify path if index is provided
         if index:

@@ -17,6 +17,7 @@
 		"vscode": {
 			// Add the IDs of extensions you want installed when the container is created.
 			"extensions": [
+				"ms-python.python",
 				"github.vscode-pull-request-github",
 				"github.vscode-github-actions",
 				"github.copilot",
@@ -24,7 +25,7 @@
 				"eamodio.gitlens",
 				"oderwat.indent-rainbow",
 				"johnpapa.vscode-peacock",
-				"vikas.code-navigation",
+				// "vikas.code-navigation",
 				"vscode-icons-team.vscode-icons",
 				"JuanBlanco.solidity",
 				"esbenp.prettier-vscode",
