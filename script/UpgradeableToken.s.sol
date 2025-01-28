@@ -9,8 +9,9 @@ import {Script, console} from "forge-std/Script.sol";
 import {Vm} from "forge-std/Test.sol";
 
 import {Token} from "../src/Token.sol";
+import {UpgradeableToken} from "../src/UpgradeableToken.sol";
 
-contract TokenScript is Script {
+contract UpgradeableTokenScript is Script {
     function setUp() public {}
 
     function run() public {
@@ -21,9 +22,11 @@ contract TokenScript is Script {
         // Setup token initialization data
         bytes memory data = abi.encodeWithSignature("initialize(string,string,address)", "MyToken", "MTK", deployer);
 
-        // Deploy upgradeable token
+        // Deploy tokens
         vm.startBroadcast(privateKey);
-        Token implementation = new Token();
+
+        Token simpleToken = new Token();
+        UpgradeableToken implementation = new UpgradeableToken();
 
         vm.recordLogs();
         TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(address(implementation), deployer, data);
@@ -33,10 +36,11 @@ contract TokenScript is Script {
         // Obtain proxy admin and token
         Vm.Log[] memory logs = vm.getRecordedLogs();
         ProxyAdmin proxyAdmin = _getProxyAdmin(logs);
-        Token token = Token(address(proxy));
+        UpgradeableToken token = UpgradeableToken(address(proxy));
         string memory tokenAddress = vm.toString(address(token));
 
-        console.log("Token (proxy)", tokenAddress);
+        console.log("Simple Token", address(simpleToken));
+        console.log("UpgradeableToken (proxy)", tokenAddress);
         console.log("ProxyAdmin", address(proxyAdmin));
         console.log("ProxyAdmin owner", proxyAdmin.owner());
     }

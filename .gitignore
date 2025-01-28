@@ -10,5 +10,12 @@ out/
 # Docs
 docs/
 
+# Python
+__pycache__/
+*.pyc
+
 # Dotenv file
 .env
+
+# Mac
+.DS_Store

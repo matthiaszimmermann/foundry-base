@@ -6,16 +6,16 @@ import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.s
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {Test, Vm, console} from "forge-std/Test.sol";
 
-import {Token} from "../src/Token.sol";
+import {UpgradeableToken} from "../src/UpgradeableToken.sol";
 
 contract TokenTestBase is Test {
-    Token token;
+    UpgradeableToken token;
     address deployer = makeAddr("deployer");
     ProxyAdmin proxyAdmin = ProxyAdmin(address(0));
 
     function setUp() public {
         // Deploy the initial implementation
-        Token implementation = new Token();
+        UpgradeableToken implementation = new UpgradeableToken();
 
         // Initialize the proxy (deployer is proxy admin)
         bytes memory data = abi.encodeWithSignature("initialize(string,string,address)", "MyToken", "MTK", deployer);
@@ -27,7 +27,7 @@ contract TokenTestBase is Test {
         assertTrue(address(proxyAdmin) != address(0));
 
         // Use the proxy as the token
-        token = Token(address(proxy));
+        token = UpgradeableToken(address(proxy));
 
         console.log("deployer", deployer);
         console.log("Token (proxy)", address(token));

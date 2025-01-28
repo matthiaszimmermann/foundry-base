@@ -5,7 +5,7 @@ import {ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transp
 import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import {console} from "forge-std/Test.sol";
 
-import {Token} from "../src/Token.sol";
+import {UpgradeableToken} from "../src/UpgradeableToken.sol";
 import {TokenV2} from "./TokenV2.sol";
 import {TokenTestBase} from "./TokenBase.t.sol";
 

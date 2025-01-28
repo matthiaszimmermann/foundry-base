@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Token} from "../src/Token.sol";
+import {UpgradeableToken} from "../src/UpgradeableToken.sol";
 import {TokenTestBase} from "./TokenBase.t.sol";
 
 contract TokenTest is TokenTestBase {
@@ -23,6 +23,9 @@ contract TokenTest is TokenTestBase {
         vm.assume(to != address(0)); // token does not allow transfer to address(0)
         vm.assume(to != from); // ensure different accounts (to make intial assertions work)
         vm.assume(to != address(proxyAdmin)); // proxy admin is denied to call any functions from implementation (_defund(proxyAdmin) is prohibited)
+
+        vm.assume(to != deployer); // ensure different accounts (to make intial assertions work)
+        vm.assume(from != deployer); // ensure different accounts (to make intial assertions work)
 
         _defund(to);
         _fund(from, amount + 1);

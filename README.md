@@ -110,7 +110,7 @@ forge inspect ERC20StorageInspector storage
 1. Start `anvil` with it
 
 ```shell
-uv run python3 bot/init.py > .env
+uv run python3 app/init.py > .env
 unset ETH_ADDRESS ETH_PRIVATE_KEY ETH_MNEMONIC
 export ETH_MNEMONIC=$(grep ETH_MNEMONIC .env | cut -d\" -f2)
 anvil --mnemonic $ETH_MNEMONIC
@@ -123,7 +123,7 @@ anvil --mnemonic $ETH_MNEMONIC
 1. Record the address of the newly deployed contract (used as `<contract-address>` below)
 
 ```shell
-forge script script/Token.s.sol --fork-url http://127.0.0.1:8545 --broadcast --private-key $(grep ETH_PRIVATE_KEY .env | cut -d= -f2)
+forge script script/UpgradeableToken.s.sol --fork-url http://127.0.0.1:8545 --broadcast --private-key $(grep ETH_PRIVATE_KEY .env | cut -d= -f2)
 ```
 
 ### Interact with the Token Contract
@@ -134,7 +134,7 @@ forge script script/Token.s.sol --fork-url http://127.0.0.1:8545 --broadcast --p
 ```shell
 eval $(echo export $(grep MNEMONIC .env))
 cd app
-uv run python3
+uv run python
 ```
 
 Follow the steps in the python shell below.
@@ -143,33 +143,54 @@ Follow the steps in the python shell below.
 import os
 
 from web3 import Web3
+from web3utils.node import Node
 from web3utils.contract import Contract
 from web3utils.wallet import Wallet
 
 # verify that w3_uri matches with your anvil chain
 w3_uri = "http://127.0.0.1:8545"
 w3 = Web3(Web3.HTTPProvider(w3_uri))
+node = Node(w3)
+
+# print network info
+node.chain_id
+node.latest_block
+node.timestamp
 
 # create account using the env variable mnemonic
-w = Wallet.from_mnemonic(os.getenv('ETH_MNEMONIC'), w3=w3)
-a = Wallet.create(w3=w3)
+w = Wallet.from_mnemonic(w3, os.getenv('ETH_MNEMONIC'))
+a = Wallet.create(w3)
 
 # transfer 1 eth and check balance
 w.transfer(a, 10**18)
 a.balance()/10**18
 
+# offline tx creation and signing
+tx = w.transfer(a, 1, sign_and_send=False)
+tx_singed = w.sign(tx)
+tx_hash = w.send(tx_singed)
+
 # create token object
 token_address = "<contract-address>"
-token = Contract(w3, "Token", token_address)
+token = Contract(w3, "IERC20Metadata", token_address)
 
 # print token balance of deployer (in full tokens)
+token.name()
 token.balanceOf(w)/10**token.decimals()
 
 # transfer some tokens
 tx_hash = token.transfer(a, 42*10**token.decimals(), {'from':w})
 
+# offline contract tx creation and signing
+tx = token.transfer(a, 42, {'nonce': None})
+tx_signed = w.sign(tx)
+tx_hash = w.send(tx_signed)
+
 # extract logs example
 # for filter parameter see https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs 
 logs = token.get_logs({'fromBlock':'latest'})
-token.contract.events.Transfer.process_log(logs[0])
+la = token.contract.events.Transfer.process_log(logs[0])
+la.args
+la.address
+la.blockNumber
 ```

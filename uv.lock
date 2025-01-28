@@ -276,15 +276,11 @@ name = "foundry-base"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "eth-account" },
     { name = "web3" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "eth-account", specifier = ">=0.13.4" },
-    { name = "web3", specifier = ">=7.6.0" },
-]
+requires-dist = [{ name = "web3", specifier = ">=7.6.0" }]
 
 [[package]]
 name = "frozenlist"

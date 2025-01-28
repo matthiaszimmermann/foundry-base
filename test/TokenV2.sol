@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Token} from "../src/Token.sol";
+import {UpgradeableToken} from "../src/UpgradeableToken.sol";
 
-contract TokenV2 is Token {
+contract TokenV2 is UpgradeableToken {
     // Namespace storage layout
     struct V2Storage {
         string _message;
