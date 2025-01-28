@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Union
 
 from eth_account import Account
@@ -6,6 +7,7 @@ from eth_account.signers.local import LocalAccount
 from eth_account.types import Language
 
 from web3 import Web3
+from web3.exceptions import TimeExhausted, Web3RPCError
 
 from util.password import generate_password
 
@@ -19,6 +21,7 @@ class Wallet:
     LANGUAGE_DEFAULT = Language.ENGLISH
     PATH_PARTS = 6
     INDEX_DEFAULT = 0
+    TX_TIMEOUT_SECONDS = 120
 
     password: str | None
     vault: dict[str, Any]
@@ -38,6 +41,7 @@ class Wallet:
         """
         Account.enable_unaudited_hdwallet_features()
 
+        self.w3 = None
         self.password = ""
         self.vault = {}
         self.mnemonic = None
@@ -46,7 +50,6 @@ class Wallet:
         self.language = None
         self.path = ETHEREUM_DEFAULT_PATH
         self.index = Wallet.INDEX_DEFAULT
-        self.w3 = None
 
 
     def nonce(self) -> int:
@@ -63,7 +66,7 @@ class Wallet:
         return self.w3.eth.get_balance(self.address)
 
 
-    def transfer(self, to: Union [str, "Wallet"], amount: int, gas_price: int = None) -> str:
+    def transfer(self, to: Union [str, "Wallet"], amount: int, gas_price: int = None, sign_and_send:bool=True) -> str:
         if not self.w3:
             raise ValueError("Web3 instance not provided")
         
@@ -82,24 +85,64 @@ class Wallet:
             "gasPrice": gas_price,
         }
 
+        # return unsigned tx is needed if signing and sending not required
+        if not sign_and_send:
+            return tx
+
+        tx_signed = self.sign(tx)
+        return self.send(tx_signed)
+
+
+    def sign(self, tx: dict[str, Any], nonce=None):
+        # provided nonce overrides tx nonce
+        if nonce:
+            tx['nonce'] = nonce
+        # use wallet nonce if tx does not provide nonce
+        elif not tx['nonce']:
+            tx['nonce'] = self.nonce()
+
+        private_key = bytes(self.account.key)
+        return self.w3.eth.account.sign_transaction(tx, private_key=private_key)
+
+
+    def send(self, signed_tx, timeout:int|None=None):
+        # send signed transaction
         try:
-            signed = self.account.sign_transaction(tx)
-            tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+            tx_hasx_0x = f'0x{tx_hash.hex()}'
+            logging.info(f"Transaction sent: {tx_hasx_0x}")
 
-        except Exception as e:
-            raise ValueError(f"Error sending transaction: {e}")
+        except Web3RPCError as e:
+            logging.error(f"Transaction error {e}")
+            raise e
 
-        return tx_hash.to_0x_hex()
+        if not timeout:
+            timeout = self.TX_TIMEOUT_SECONDS
+
+        # wait for tx to complete
+        try:
+            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=timeout)
+
+        except TimeExhausted:
+            logging.warning(f"Transaction timeout after {timeout} seconds.")
+            return tx_hasx_0x
+
+        if receipt['status'] == 1:
+            logging.info(f"Transaction successful: {receipt}")
+        else:
+            logging.warning(f"Transaction failed: {receipt}")
+
+        return tx_hasx_0x
 
 
     @classmethod
     def create(
         cls,
+        w3: Web3,
         words: int = WORDS_DEFAULT,
         language: Language = LANGUAGE_DEFAULT,
         index: int = INDEX_DEFAULT,
         password: str | None = None,
-        w3: Web3 | None = None,
         print_address: bool = True,  # noqa: FBT001, FBT002
     ) -> "Wallet":
         """Create a new wallet."""
@@ -107,6 +150,7 @@ class Wallet:
         Wallet.validate_num_words(words)
 
         wallet = Wallet()
+        wallet.w3 = w3
         wallet.language = language
         wallet.index = index
 
@@ -128,27 +172,39 @@ class Wallet:
 
         wallet.password = password
         wallet.vault = wallet.account.encrypt(password)  # type: ignore  # noqa: PGH003
-        wallet.w3 = w3
 
         return wallet
 
+
+    @staticmethod
+    def from_address(
+        w3: Web3,
+        address:str
+    ) -> "Wallet":
+        """Create a new wallet from a provided address."""
+        wallet = Wallet()
+        wallet.w3 = w3
+        wallet.address = Web3.to_checksum_address(address)
+        return wallet
+
+
     @staticmethod
     def from_mnemonic(
+        w3: Web3,
         mnemonic: str,
         index: int = INDEX_DEFAULT,
         password: str = generate_password(),
         path: str = ETHEREUM_DEFAULT_PATH,
-        w3: Web3 | None = None,
     ) -> "Wallet":
         """Create a new wallet from a provided mnemonic."""
         Wallet.validate_mnemonic(mnemonic)
         Wallet.validate_index(index)
 
         wallet = Wallet()
+        wallet.w3 = w3
         wallet.mnemonic = mnemonic
         wallet.index = index
         wallet.path = path
-        wallet.w3 = w3
 
         # modify path if index is provided
         if index:
@@ -161,10 +217,16 @@ class Wallet:
 
         return wallet
 
+
     @staticmethod
-    def from_vault(vault: dict[str, Any], password: str) -> "Wallet":
+    def from_vault(
+        w3: Web3,
+        vault: dict[str, Any], 
+        password: str
+    ) -> "Wallet":
         """Create a new wallet from a vault dict."""
         wallet = Wallet()
+        wallet.w3 = w3
         wallet.password = password
         wallet.vault = vault
         wallet.account = Account.from_key(Account.decrypt(vault, password=password))
@@ -172,11 +234,13 @@ class Wallet:
 
         return wallet
 
+
     @staticmethod
     def index_from_path(path: str) -> int:
         """Extract index from provided path string."""
         Wallet.validate_path(path)
         return int(path.split("/")[-1])
+
 
     @staticmethod
     def validate_path(path: str) -> None:
@@ -195,6 +259,7 @@ class Wallet:
             )
             raise ValueError(msg)
 
+
     @staticmethod
     def validate_mnemonic(mnemonic: str) -> None:
         """Perform basic sanity checks.
@@ -206,6 +271,7 @@ class Wallet:
             raise TypeError(msg)
 
         Wallet.validate_num_words(len(mnemonic.split()))
+
 
     @staticmethod
     def validate_num_words(words: int) -> None:
@@ -220,6 +286,7 @@ class Wallet:
         if words not in Wallet.VALID_NUM_WORDS:
             msg = f"Provided number of words is not in {Wallet.VALID_NUM_WORDS}"
             raise ValueError(msg)
+
 
     @staticmethod
     def validate_index(index: int) -> None:

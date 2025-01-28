@@ -1,6 +1,7 @@
 import json
 import logging
 
+from functools import wraps
 from typing import Any, Dict
 
 from web3 import Web3
@@ -9,6 +10,7 @@ from web3.exceptions import TimeExhausted
 from web3.types import FilterParams
 
 from web3utils.wallet import Wallet
+
 
 class Contract:
 
@@ -25,15 +27,17 @@ class Contract:
 
     def __init__(self, w3:Web3, contract_name:str, contract_address:str, out_path:str = FOUNDRY_OUT):
         self.w3 = w3
-        self.name = contract_name
-        self.abi = self._load_abi(contract_name, out_path)
+        self.contract_name = contract_name
+        self.abi = self._load_abi(contract_name, out_path, self.SOLIDITY_EXT)
         self.contract = w3.eth.contract(address=contract_address, abi=self.abi)
         self.address = self.contract.address
         self._setup_functions()
 
+
     def is_connected(self) -> bool:
         return self.w3.is_connected()
-    
+
+
     def get_logs(self, filter_params:FilterParams|None = None) -> Any:
         if not filter_params:
             filter_params = {
@@ -42,6 +46,7 @@ class Contract:
             }
 
         return self.w3.eth.get_logs(filter_params=filter_params)
+
 
     def _setup_functions(self) -> None:
         for func in self.contract.abi:
@@ -56,19 +61,80 @@ class Contract:
                     logging.info(f"creating {func_name}(...) call")
                     setattr(self, func_name, self._create_read_method(func_name))
 
+
     def _create_read_method(self, func_name: str):
         def read_method(*args, **kwargs) -> Any:
             try:
                 modified_args = [arg.address if isinstance(arg, Wallet) else arg for arg in args]
                 return getattr(self.contract.functions, func_name)(*modified_args, **kwargs).call()
             except Exception as e:
-                logging.warn(f"Error calling function '{func_name}': {e}")
+                logging.warning(f"Error calling function '{func_name}': {e}")
                 return None
 
-        # Optionally, add docstrings or additional attributes here
-        read_method.__name__ = func_name
-        read_method.__doc__ = f"Calls the '{func_name}' function of the contract."
+        # add docstrings signature and selector
+        self._amend_method(read_method, func_name)
+
         return read_method
+
+
+    def _create_write_method(self, func_name: str):
+        def write_method(*args) -> str:
+            tx_params = self._get_tx_params(args)
+            function_args = args[:-1]
+
+            # create and return unsigned tx
+            if 'nonce' in tx_params:
+                return self._build_tx(func_name, function_args, tx_params)
+
+            # create signed tx and send it
+            try:
+                wallet = tx_params['from']
+                tx = self._build_tx(func_name, function_args, tx_params)
+                tx_signed = wallet.sign(tx)
+                tx_hash = wallet.send(tx_signed)
+                return tx_hash
+
+            except Exception as e:
+                logging.warning(f"Error sending transaction for function '{func_name}': {e}")
+                return tx_hash
+
+        # add docstrings signature and selector
+        self._amend_method(write_method, func_name)
+
+        return write_method
+
+
+    def _amend_method(self, method, name):
+        method.__name__ = name
+        method.__doc__ = f"Calls the '{name}' contract function."
+
+        signature = getattr(self.contract.functions, name).signature
+        method.signature = signature
+        method.argument_names = getattr(self.contract.functions, name).argument_names
+        method.inputs = getattr(self.contract.functions, name).abi['inputs']
+        method.outputs = getattr(self.contract.functions, name).abi['outputs']
+        method.selector = Web3.keccak(text=signature)[:4]
+        method.selector_hex = method.selector.hex()
+
+
+    def _build_tx(self, func_name:str, function_args:tuple, tx_params) -> str:
+        # tx properties
+        chain_id = self.w3.eth.chain_id
+        gas = tx_params.get('gas', self.GAS)
+        gas_price = tx_params.get('gasPrice', self.w3.eth.gas_price)
+        nonce = self._get_nonce(tx_params)
+
+        # transform wallet args to addresses (str)
+        modified_args = [arg.address if isinstance(arg, Wallet) else arg for arg in function_args]
+
+        # create tx
+        return getattr(self.contract.functions, func_name)(*modified_args).build_transaction({
+            'chainId': chain_id,
+            'gas': gas,
+            'gasPrice': gas_price,
+            'nonce': nonce,
+        })
+
 
     def _get_tx_params(self, args:tuple) -> Dict[str, Any]:
         if len(args) == 0:
@@ -79,76 +145,30 @@ class Contract:
         if not isinstance(tx_params, dict):
             raise ValueError("Transaction parameters must be provided as a dictionary.")
 
-        if 'from' not in tx_params:
-            raise ValueError("Transaction parameters must include 'from' account.")
+        if not ('nonce' in tx_params or 'from' in tx_params):
+            raise ValueError("Transaction parameters must either include 'nonce' or 'from' account.")
 
-        if not isinstance(tx_params['from'], Wallet):
-            raise ValueError("Transaction 'from' account must be a Wallet instance.")
+        if 'from' in tx_params:
+            if not isinstance(tx_params['from'], Wallet):
+                raise ValueError("Transaction 'from' account must be a Wallet instance.")
+        else:
+            nonce = tx_params.get('nonce', None)
+            if not (nonce is None or (isinstance(nonce, int) and nonce >= 0)):
+                raise ValueError("Transaction 'nonce' must must be None or a positive int value.")
 
         return tx_params
 
-    def _create_write_method(self, func_name: str):
-        def write_method(*args) -> str:
-            tx_params = self._get_tx_params(args)
-            function_args = args[:-1]
 
-            try:
-                wallet = tx_params['from']
+    def _get_nonce(self, tx_params:Dict[str, Any]) -> int:
+        if 'nonce' in tx_params:
+            return tx_params['nonce']
+        else:
+            return self.w3.eth.get_transaction_count(tx_params['from'].address)
 
-                # create tx properties
-                chain_id = self.w3.eth.chain_id
-                gas = tx_params.get('gas', self.GAS)
-                gas_price = tx_params.get('gasPrice', self.w3.eth.gas_price)
-                nonce = self.w3.eth.get_transaction_count(wallet.address)
 
-                # transform wallet args to addresses (str)
-                modified_args = [arg.address if isinstance(arg, Wallet) else arg for arg in function_args]
-
-                # create tx
-                txn = getattr(self.contract.functions, func_name)(*modified_args).build_transaction({
-                    'chainId': chain_id,
-                    'gas': gas,
-                    'gasPrice': gas_price,
-                    'nonce': nonce,
-                })
-
-                # sign tx
-                private_key = bytes(wallet.account.key)
-                signed_txn = self.w3.eth.account.sign_transaction(txn, private_key=private_key)
-
-                # send signed transaction
-                tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
-                logging.info(f"Transaction sent: {tx_hash.hex()}")
-
-                if 'timeout' not in tx_params:
-                    timeout = self.TX_TIMEOUT_SECONDS
-                else:
-                    timeout = tx_params['timeout'] if tx_params['timeout'] is not None else self.TX_TIMEOUT_SECONDS
-
-                try:
-                    receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=timeout)
-                except TimeExhausted:
-                    logging.warning(f"Transaction timeout after {timeout} seconds.")
-                    return tx_hash.hex()
-
-                if receipt['status'] == 1:
-                    logging.info(f"Transaction successful: {receipt}")
-                else:
-                    logging.warning(f"Transaction failed: {receipt}")
-
-                return tx_hash.hex()
-
-            except Exception as e:
-                logging.warning(f"Error sending transaction for function '{func_name}': {e}")
-                return tx_hash.hex()
-
-        write_method.__name__ = func_name
-        write_method.__doc__ = f"Sends a transaction to the '{func_name}' function of the contract."
-        return write_method
-
-    def _load_abi(self, contract:str, out_path:str) -> Dict[str, Any]:
+    def _load_abi(self, contract:str, out_path:str, sol_ext:str) -> Dict[str, Any]:
         try:
-            abi_path = f"{out_path}/{contract}.{self.SOLIDITY_EXT}/{contract}.json"
+            abi_path = f"{out_path}/{contract}.{sol_ext}/{contract}.json"
 
             with open(abi_path, "r") as abi_file:
                 contract_json = json.load(abi_file)
