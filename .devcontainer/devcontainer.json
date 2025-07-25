@@ -5,9 +5,9 @@
 		"context": "..",
 		"dockerfile": "Dockerfile",
 		"args": {
-			"DEBIAN_VERSION": "bookworm",
-			"UV_VERSION": "0.5.4",
-			"PYTHON_VERSION": "3.13"
+			"DEBIAN_VERSION": "bullseye",
+			"UV_VERSION": "0.5.10",
+			"PYTHON_VERSION": "3.12"
 		}
 	},
 
@@ -25,7 +25,6 @@
 				"eamodio.gitlens",
 				"oderwat.indent-rainbow",
 				"johnpapa.vscode-peacock",
-				// "vikas.code-navigation",
 				"vscode-icons-team.vscode-icons",
 				"JuanBlanco.solidity",
 				"esbenp.prettier-vscode",
@@ -35,6 +34,6 @@
 		}
 	},
 
-	"forwardPorts": [8545]
-	// "postCreateCommand": "forge --version"
+	"forwardPorts": [8545],
+	"remoteUser": "devuser"
 }
